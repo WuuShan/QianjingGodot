@@ -26,6 +26,7 @@ var projectiles: Array[Dictionary] = []    # {pos, dir, speed, damage}
 # 拖拽状态
 var _keys_now := {}
 var _prev_keys := {}
+var backpack_open := false               # 背包界面（装备栏+暂存库+尸体）默认关闭，B 开关
 var drag_block: BlockInstance = null
 var drag_source := -1   # 0=暂存库 1=尸体 2=网格
 var drag_origin := Vector2i.ZERO
@@ -73,7 +74,7 @@ func _refresh_zone() -> void:
 	grid.clear_zones()
 	grid.add_zone(Rect2i(wand_block.x, wand_block.y, ZONE_W, ZONE_H))
 
-var _watched := [KEY_F, KEY_V, KEY_G, KEY_K, KEY_R]
+var _watched := [KEY_B, KEY_F, KEY_V, KEY_G, KEY_K, KEY_R]
 
 func _key_just(key: Key) -> bool:
 	return bool(_keys_now.get(key, false)) and not bool(_prev_keys.get(key, false))
@@ -105,6 +106,8 @@ func _move_player(delta: float) -> void:
 	player_pos += v.normalized() * player_speed * delta
 
 func _process_keys() -> void:
+	if _key_just(KEY_B) and drag_block == null:
+		backpack_open = not backpack_open
 	if _key_just(KEY_F):
 		var p := library.feed(1, "worm")
 		print("[喂库] 蓝×蠕虫 解析进度 %d/3（%s）" % [p, library.tier_name(p)])
@@ -159,12 +162,15 @@ func _process_drag(delta: float) -> void:
 		_drop(get_global_mouse_position())
 
 func _try_pick(world: Vector2) -> void:
+	if not backpack_open:
+		return  # 背包关闭时不响应拾取
 	# 网格上的块
 	for b in grid.blocks:
 		for cell in b.cells():
 			if Vector2(cell.x + 0.5, cell.y + 0.5).distance_to(world) < 0.6:
 				drag_block = b
 				drag_source = 2
+				drag_origin = Vector2i(b.x, b.y)   # 记录原位，放不回去时退回
 				grid.remove(b)
 				return
 	# 暂存库排队块
@@ -245,14 +251,16 @@ func _on_spell_release(blue: BlockInstance, damage: float) -> void:
 # ---------- 绘制 ----------
 
 func _draw() -> void:
+	_draw_player()
+	_draw_dummy()
+	_draw_projectiles()
+	if not backpack_open:
+		return  # 背包关闭：世界只显示玩家/假人/弹幕，虚空界面整体隐藏
 	_draw_zone()
 	_draw_stash()
 	_draw_grid_blocks()
 	_draw_queue_items()
 	_draw_corpse_items()
-	_draw_player()
-	_draw_dummy()
-	_draw_projectiles()
 	_draw_labels()
 	_draw_drag_ghost()
 
